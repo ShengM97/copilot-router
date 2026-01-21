@@ -3,7 +3,7 @@ import { streamSSE, type SSEMessage } from "hono/streaming"
 import consola from "consola"
 
 import { forwardError } from "~/lib/error"
-import { state } from "~/lib/state"
+import { tokenManager } from "~/lib/token-manager"
 import {
   createChatCompletions,
   type ChatCompletionResponse,
@@ -13,6 +13,7 @@ import {
   createEmbeddings,
   type EmbeddingRequest,
 } from "~/services/copilot/create-embeddings"
+import { getModels, getModelsForAllTokens } from "~/services/copilot/get-models"
 
 const CommonResponseError = z.object({
   error: z.object({
@@ -133,7 +134,22 @@ export function registerOpenAIRoutes(app: OpenAPIHono) {
       const payload = await c.req.json<ChatCompletionsPayload>()
       consola.debug("Request payload:", JSON.stringify(payload).slice(-400))
 
-      const selectedModel = state.models?.data.find(
+      // Get a random token entry for load balancing
+      const tokenEntry = tokenManager.getRandomTokenEntry()
+      if (!tokenEntry) {
+        return c.json({ error: { message: "No active tokens available", type: "auth_error" } }, 503)
+      }
+
+      // Fetch models if needed
+      if (!tokenEntry.models) {
+        try {
+          tokenEntry.models = await getModels(tokenEntry)
+        } catch (e) {
+          consola.warn("Could not fetch models for max_tokens lookup")
+        }
+      }
+
+      const selectedModel = tokenEntry.models?.data.find(
         (model) => model.id === payload.model,
       )
 
@@ -141,7 +157,7 @@ export function registerOpenAIRoutes(app: OpenAPIHono) {
         payload.max_tokens = selectedModel.capabilities.limits.max_output_tokens
       }
 
-      const response = await createChatCompletions(payload)
+      const response = await createChatCompletions(payload, tokenEntry)
 
       if (isNonStreaming(response)) {
         consola.debug("Non-streaming response")
@@ -163,7 +179,36 @@ export function registerOpenAIRoutes(app: OpenAPIHono) {
   // GET /models
   app.openapi(modelsRoute, async (c) => {
     try {
-      const models = state.models?.data.map((model) => ({
+      // Check for grouped query parameter
+      const grouped = c.req.query("grouped") === "true"
+
+      if (grouped) {
+        // Return models grouped by token
+        const tokenModels = await getModelsForAllTokens()
+        return c.json({
+          object: "list",
+          grouped: true,
+          tokens: tokenModels.map((tm) => ({
+            token_id: tm.tokenId,
+            username: tm.username,
+            account_type: tm.accountType,
+            error: tm.error,
+            models: tm.models?.data.map((model) => ({
+              id: model.id,
+              object: "model",
+              type: "model",
+              created: 0,
+              created_at: new Date(0).toISOString(),
+              owned_by: model.vendor,
+              display_name: model.name,
+            })) ?? [],
+          })),
+        })
+      }
+
+      // Get models from first active token
+      const modelsResponse = await getModels()
+      const models = modelsResponse.data.map((model) => ({
         id: model.id,
         object: "model",
         type: "model",

@@ -1,93 +1,29 @@
-import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi"
+import { OpenAPIHono } from "@hono/zod-openapi"
 
-import { state } from "~/lib/state"
-import { getCopilotUsage } from "~/services/github/get-copilot-usage"
-
-const CommonResponseError = z.object({
-  error: z.object({
-    message: z.string(),
-    type: z.string(),
-  }),
-})
-
-// Token route
-const tokenRoute = createRoute({
-  method: "get",
-  path: "/token",
-  tags: ["Utility"],
-  summary: "Get current Copilot token",
-  description: "Returns the current Copilot authentication token.",
-  responses: {
-    200: {
-      content: {
-        "application/json": {
-          schema: z.object({
-            token: z.string().nullable(),
-          }),
-        },
-      },
-      description: "Token retrieved successfully",
-    },
-    500: {
-      content: { "application/json": { schema: CommonResponseError } },
-      description: "Internal server error",
-    },
-  },
-})
-
-// Usage route
-const usageRoute = createRoute({
-  method: "get",
-  path: "/usage",
-  tags: ["Utility"],
-  summary: "Get Copilot usage statistics",
-  description: "Returns the current Copilot usage and quota information.",
-  responses: {
-    200: {
-      content: {
-        "application/json": {
-          schema: z.object({}).passthrough(),
-        },
-      },
-      description: "Usage retrieved successfully",
-    },
-    500: {
-      content: { "application/json": { schema: CommonResponseError } },
-      description: "Internal server error",
-    },
-  },
-})
-
-// Health check route
-const healthRoute = createRoute({
-  method: "get",
-  path: "/",
-  tags: ["Utility"],
-  summary: "Health check",
-  description: "Returns server health status.",
-  responses: {
-    200: {
-      content: {
-        "text/plain": {
-          schema: z.string(),
-        },
-      },
-      description: "Server is healthy",
-    },
-  },
-})
+import { tokenManager } from "~/lib/token-manager"
+import { getCopilotUsage, getCopilotUsageForAllTokens } from "~/services/github/get-copilot-usage"
 
 export function registerUtilityRoutes(app: OpenAPIHono) {
   // GET /
-  app.openapi(healthRoute, (c) => {
-    return c.text("Copilot Router is running")
+  app.get("/", (c) => {
+    const counts = tokenManager.getTokenCount()
+    return c.text(`Copilot Router is running (${counts.active}/${counts.total} active tokens)`)
   })
 
   // GET /token
-  app.openapi(tokenRoute, (c) => {
+  app.get("/token", (c) => {
     try {
+      const entries = tokenManager.getActiveTokenEntries()
+      const tokens = entries.map(e => ({
+        id: e.id,
+        username: e.username,
+        copilot_token: e.copilotToken?.substring(0, 20) + "...",
+        expires_at: e.copilotTokenExpiresAt?.toISOString(),
+      }))
+
       return c.json({
-        token: state.copilotToken ?? null,
+        count: tokens.length,
+        tokens,
       })
     } catch (error) {
       console.error("Error fetching token:", error)
@@ -96,13 +32,58 @@ export function registerUtilityRoutes(app: OpenAPIHono) {
   })
 
   // GET /usage
-  app.openapi(usageRoute, async (c) => {
+  app.get("/usage", async (c) => {
     try {
+      // Check for grouped query parameter
+      const grouped = c.req.query("grouped") === "true"
+
+      if (grouped) {
+        // Return usage grouped by token
+        const tokenUsage = await getCopilotUsageForAllTokens()
+        return c.json({
+          grouped: true,
+          tokens: tokenUsage.map((tu) => ({
+            token_id: tu.tokenId,
+            username: tu.username,
+            account_type: tu.accountType,
+            error: tu.error,
+            usage: tu.usage,
+          })),
+        })
+      }
+
+      // Get usage from first active token
       const usage = await getCopilotUsage()
       return c.json(usage)
     } catch (error) {
       console.error("Error fetching Copilot usage:", error)
       return c.json({ error: { message: "Failed to fetch Copilot usage", type: "error" } }, 500)
+    }
+  })
+
+  // GET /quota - Grouped quota display for all tokens
+  app.get("/quota", async (c) => {
+    try {
+      const tokenUsage = await getCopilotUsageForAllTokens()
+      
+      return c.json({
+        tokens: tokenUsage.map((tu) => ({
+          token_id: tu.tokenId,
+          username: tu.username,
+          account_type: tu.accountType,
+          error: tu.error,
+          quota: tu.usage ? {
+            chat: tu.usage.quota_snapshots?.chat,
+            completions: tu.usage.quota_snapshots?.completions,
+            premium_interactions: tu.usage.quota_snapshots?.premium_interactions,
+            reset_date: tu.usage.quota_reset_date,
+            copilot_plan: tu.usage.copilot_plan,
+          } : null,
+        })),
+      })
+    } catch (error) {
+      console.error("Error fetching quota:", error)
+      return c.json({ error: { message: "Failed to fetch quota", type: "error" } }, 500)
     }
   })
 }

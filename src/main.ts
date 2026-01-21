@@ -1,14 +1,19 @@
+import "dotenv/config"
+
 import { serve } from "@hono/node-server"
+import { serveStatic } from "@hono/node-server/serve-static"
 import { OpenAPIHono } from "@hono/zod-openapi"
 import { cors } from "hono/cors"
 import { logger } from "hono/logger"
 import consola from "consola"
 
-import { initializeState, refreshCopilotToken } from "~/lib/utils"
+import { initializeDatabase } from "~/lib/database"
+import { tokenManager } from "~/lib/token-manager"
 import { registerOpenAIRoutes } from "~/routes/openai/routes"
 import { registerAnthropicRoutes } from "~/routes/anthropic/routes"
 import { registerGeminiRoutes } from "~/routes/gemini/routes"
 import { registerUtilityRoutes } from "~/routes/utility/routes"
+import { registerAuthRoutes } from "~/routes/auth/routes"
 
 const PORT = parseInt(process.env.PORT || "4242", 10)
 const TOKEN_REFRESH_INTERVAL = 25 * 60 * 1000 // 25 minutes
@@ -16,8 +21,24 @@ const TOKEN_REFRESH_INTERVAL = 25 * 60 * 1000 // 25 minutes
 async function main() {
   consola.info("Starting Copilot Router...")
 
-  // Initialize state (read GitHub token, fetch Copilot token, cache models)
-  await initializeState()
+  // Initialize database
+  consola.info("Connecting to SQL Server...")
+  await initializeDatabase()
+
+  // Load tokens from database
+  consola.info("Loading tokens from database...")
+  await tokenManager.loadFromDatabase()
+
+  // Refresh all Copilot tokens
+  const tokenCount = tokenManager.getTokenCount()
+  if (tokenCount.total > 0) {
+    consola.info(`Found ${tokenCount.total} tokens, refreshing Copilot tokens...`)
+    await tokenManager.refreshAllCopilotTokens()
+    const updatedCount = tokenManager.getTokenCount()
+    consola.success(`${updatedCount.active} tokens active`)
+  } else {
+    consola.warn("No tokens found in database. Use /auth/login to add tokens.")
+  }
 
   // Create OpenAPI Hono app
   const app = new OpenAPIHono()
@@ -28,6 +49,9 @@ async function main() {
 
   // Register utility routes at root
   registerUtilityRoutes(app)
+
+  // Register auth routes
+  registerAuthRoutes(app)
 
   // OpenAI-compatible routes
   const openaiRouter = new OpenAPIHono()
@@ -45,6 +69,10 @@ async function main() {
   registerGeminiRoutes(geminiRouter)
   app.route("/v1beta", geminiRouter)      // /v1beta/models/:model:generateContent
 
+  // Serve static files (login page)
+  app.use("/static/*", serveStatic({ root: "./public", rewriteRequestPath: (path) => path.replace("/static", "") }))
+  app.get("/login", serveStatic({ path: "./public/index.html" }))
+
   // OpenAPI documentation
   app.doc("/openapi.json", {
     openapi: "3.0.0",
@@ -56,7 +84,11 @@ async function main() {
   })
 
   // Start token refresh interval
-  setInterval(refreshCopilotToken, TOKEN_REFRESH_INTERVAL)
+  setInterval(() => {
+    tokenManager.refreshAllCopilotTokens().catch((error) => {
+      consola.error("Failed to refresh tokens:", error)
+    })
+  }, TOKEN_REFRESH_INTERVAL)
 
   // Start server
   consola.info(`Starting server on port ${PORT}...`)
@@ -67,10 +99,12 @@ async function main() {
 
   consola.success(`Copilot Router running at http://localhost:${PORT}`)
   consola.info("Available endpoints:")
+  consola.info("  Web UI:    GET /login")
+  consola.info("  Auth:      POST /auth/login, POST /auth/complete, GET /auth/tokens")
   consola.info("  OpenAI:    POST /v1/chat/completions, GET /v1/models, POST /v1/embeddings")
   consola.info("  Anthropic: POST /v1/messages, POST /v1/messages/count_tokens")
   consola.info("  Gemini:    POST /v1beta/models/:model:generateContent")
-  consola.info("  Utility:   GET /, GET /token, GET /usage")
+  consola.info("  Utility:   GET /, GET /token, GET /usage, GET /quota")
   consola.info("  Docs:      GET /openapi.json")
 }
 

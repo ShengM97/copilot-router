@@ -1,14 +1,18 @@
 import consola from "consola"
 import { events } from "fetch-event-stream"
 
-import { copilotHeaders, copilotBaseUrl } from "~/lib/api-config"
+import { copilotHeadersForEntry, copilotBaseUrlForEntry } from "~/lib/api-config"
 import { HTTPError } from "~/lib/error"
-import { state } from "~/lib/state"
+import { tokenManager, type TokenEntry } from "~/lib/token-manager"
 
 export const createChatCompletions = async (
   payload: ChatCompletionsPayload,
+  tokenEntry?: TokenEntry,
 ) => {
-  if (!state.copilotToken) throw new Error("Copilot token not found")
+  // Get token entry - use provided one or get random for load balancing
+  const entry = tokenEntry || tokenManager.getRandomTokenEntry()
+  if (!entry) throw new Error("No active tokens available")
+  if (!entry.copilotToken) throw new Error("Copilot token not found for entry")
 
   const enableVision = payload.messages.some(
     (x) =>
@@ -20,12 +24,13 @@ export const createChatCompletions = async (
     ["assistant", "tool"].includes(msg.role),
   )
 
+  const vsCodeVersion = tokenManager.getVSCodeVersion()
   const headers: Record<string, string> = {
-    ...copilotHeaders(state, enableVision),
+    ...copilotHeadersForEntry(entry, vsCodeVersion, enableVision),
     "X-Initiator": isAgentCall ? "agent" : "user",
   }
 
-  const response = await fetch(`${copilotBaseUrl(state)}/chat/completions`, {
+  const response = await fetch(`${copilotBaseUrlForEntry(entry)}/chat/completions`, {
     method: "POST",
     headers,
     body: JSON.stringify(payload),
@@ -33,6 +38,7 @@ export const createChatCompletions = async (
 
   if (!response.ok) {
     consola.error("Failed to create chat completions", response)
+    tokenManager.reportError(entry.id)
     throw new HTTPError("Failed to create chat completions", response)
   }
 

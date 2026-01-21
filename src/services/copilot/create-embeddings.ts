@@ -1,17 +1,25 @@
-import { copilotHeaders, copilotBaseUrl } from "~/lib/api-config"
+import { copilotHeadersForEntry, copilotBaseUrlForEntry } from "~/lib/api-config"
 import { HTTPError } from "~/lib/error"
-import { state } from "~/lib/state"
+import { tokenManager, type TokenEntry } from "~/lib/token-manager"
 
-export const createEmbeddings = async (payload: EmbeddingRequest) => {
-  if (!state.copilotToken) throw new Error("Copilot token not found")
+export const createEmbeddings = async (payload: EmbeddingRequest, tokenEntry?: TokenEntry) => {
+  // Get token entry - use provided one or get random for load balancing
+  const entry = tokenEntry || tokenManager.getRandomTokenEntry()
+  if (!entry) throw new Error("No active tokens available")
+  if (!entry.copilotToken) throw new Error("Copilot token not found for entry")
 
-  const response = await fetch(`${copilotBaseUrl(state)}/embeddings`, {
+  const vsCodeVersion = tokenManager.getVSCodeVersion()
+  
+  const response = await fetch(`${copilotBaseUrlForEntry(entry)}/embeddings`, {
     method: "POST",
-    headers: copilotHeaders(state),
+    headers: copilotHeadersForEntry(entry, vsCodeVersion),
     body: JSON.stringify(payload),
   })
 
-  if (!response.ok) throw new HTTPError("Failed to create embeddings", response)
+  if (!response.ok) {
+    tokenManager.reportError(entry.id)
+    throw new HTTPError("Failed to create embeddings", response)
+  }
 
   return (await response.json()) as EmbeddingResponse
 }
