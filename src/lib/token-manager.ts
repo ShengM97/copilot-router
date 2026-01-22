@@ -4,13 +4,11 @@ import { randomUUID } from "node:crypto"
 import {
   getAllTokens,
   saveToken,
-  updateCopilotToken,
   updateGithubToken,
   getTokenById,
   deactivateToken,
   type TokenRecord,
 } from "./database"
-import { getCopilotTokenForGithubToken } from "~/services/github/get-copilot-token"
 import { getGitHubUserForToken } from "~/services/github/get-user"
 import type { ModelsResponse } from "~/services/copilot/get-models"
 
@@ -57,7 +55,7 @@ class TokenManager {
    * Get active token entries only
    */
   getActiveTokenEntries(): TokenEntry[] {
-    return this.getAllTokenEntries().filter(t => t.isActive && t.copilotToken)
+    return this.getAllTokenEntries().filter(t => t.isActive)
   }
 
   /**
@@ -143,13 +141,6 @@ class TokenManager {
       // Update in database
       await updateGithubToken(existingEntry.id, githubToken)
       
-      // Refresh Copilot token - don't throw on failure
-      try {
-        await this.refreshCopilotTokenForEntry(existingEntry)
-      } catch (e) {
-        consola.warn(`addToken: Failed to refresh Copilot token for ${username}, but token was saved`)
-      }
-      
       consola.info(`Updated token for existing user: ${username}`)
       return existingEntry
     }
@@ -173,70 +164,24 @@ class TokenManager {
 
     this.tokens.set(id, entry)
 
-    // Fetch Copilot token - don't throw on failure
-    try {
-      await this.refreshCopilotTokenForEntry(entry)
-    } catch (e) {
-      consola.warn(`addToken: Failed to refresh Copilot token for new user ${username}, but token was saved`)
-    }
-
     consola.success(`Added token for user: ${username}`)
     return entry
   }
 
   /**
    * Refresh Copilot token for a specific entry
+   * @deprecated No longer used - using GitHub Access Token directly
    */
   async refreshCopilotTokenForEntry(entry: TokenEntry): Promise<void> {
-    try {
-      const response = await getCopilotTokenForGithubToken(
-        entry.githubToken,
-        this.vsCodeVersion,
-        entry.accountType
-      )
-      
-      entry.copilotToken = response.token
-      entry.copilotTokenExpiresAt = new Date(response.expires_at * 1000)
-      entry.errorCount = 0
-
-      // Update in database
-      await updateCopilotToken(entry.id, response.token, entry.copilotTokenExpiresAt)
-
-      consola.debug(`Refreshed Copilot token for ${entry.username}`)
-    } catch (error) {
-      entry.errorCount++
-      // Clear copilot token on failure so this token won't be used
-      entry.copilotToken = null
-      entry.copilotTokenExpiresAt = null
-      
-      consola.error(`Failed to refresh Copilot token for ${entry.username}:`, error)
-      
-      // Deactivate if too many errors
-      if (entry.errorCount >= 3) {
-        entry.isActive = false
-        await deactivateToken(entry.id)
-        consola.warn(`Deactivated token for ${entry.username} due to errors`)
-      }
-      
-      throw error
-    }
+    consola.debug(`refreshCopilotTokenForEntry is deprecated - using GitHub Access Token directly for ${entry.username}`)
   }
 
   /**
    * Refresh all Copilot tokens
+   * @deprecated No longer used - using GitHub Access Token directly
    */
   async refreshAllCopilotTokens(): Promise<void> {
-    const entries = Array.from(this.tokens.values())
-    
-    for (const entry of entries) {
-      if (!entry.isActive) continue
-      
-      try {
-        await this.refreshCopilotTokenForEntry(entry)
-      } catch (error) {
-        // Error already logged in refreshCopilotTokenForEntry
-      }
-    }
+    consola.debug(`refreshAllCopilotTokens is deprecated - using GitHub Access Token directly`)
   }
 
   /**

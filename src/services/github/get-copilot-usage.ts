@@ -1,4 +1,4 @@
-import { GITHUB_API_BASE_URL, githubHeadersForEntry, standardHeaders } from "~/lib/api-config"
+import { GITHUB_API_BASE_URL, standardHeaders } from "~/lib/api-config"
 import { HTTPError } from "~/lib/error"
 import { tokenManager, type TokenEntry } from "~/lib/token-manager"
 
@@ -13,12 +13,11 @@ const API_VERSION = "2025-05-01"
 function createGithubHeaders(githubToken: string, vsCodeVersion: string) {
   return {
     ...standardHeaders(),
-    authorization: `token ${githubToken}`,
-    "editor-version": `vscode/${vsCodeVersion}`,
-    "editor-plugin-version": EDITOR_PLUGIN_VERSION,
-    "user-agent": USER_AGENT,
+    authorization: `Bearer ${githubToken}`,
+    "copilot-integration-id": "copilot-developer-cli",
+    "user-agent": "copilot/0.0.388 (linux v24.11.1) term/unknown",
+    "openai-intent": "conversation-agent",
     "x-github-api-version": API_VERSION,
-    "x-vscode-user-agent-library-version": "electron-fetch",
   }
 }
 

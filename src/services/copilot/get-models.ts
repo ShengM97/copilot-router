@@ -6,7 +6,6 @@ export const getModels = async (tokenEntry?: TokenEntry) => {
   // Get token entry - use provided one or get first active one
   const entry = tokenEntry || tokenManager.getActiveTokenEntries()[0]
   if (!entry) throw new Error("No active tokens available")
-  if (!entry.copilotToken) throw new Error("Copilot token not found for entry")
 
   const vsCodeVersion = tokenManager.getVSCodeVersion()
 

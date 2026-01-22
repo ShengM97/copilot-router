@@ -6,7 +6,6 @@ export const createEmbeddings = async (payload: EmbeddingRequest, tokenEntry?: T
   // Get token entry - use provided one or get random for load balancing
   const entry = tokenEntry || tokenManager.getRandomTokenEntry()
   if (!entry) throw new Error("No active tokens available")
-  if (!entry.copilotToken) throw new Error("Copilot token not found for entry")
 
   const vsCodeVersion = tokenManager.getVSCodeVersion()
   

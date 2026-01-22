@@ -2,8 +2,10 @@ import { standardHeaders } from "~/lib/api-config"
 import { HTTPError } from "~/lib/error"
 
 export const GITHUB_BASE_URL = "https://github.com"
-export const GITHUB_CLIENT_ID = "Iv1.b507a08c87ecfe98"
-export const GITHUB_APP_SCOPES = ["read:user"].join(" ")
+// GitHub CLI (gh) OAuth App Client ID
+export const GITHUB_CLIENT_ID = "178c6fc778ccc68e1d6a"
+// Scopes matching `gh auth login` defaults
+export const GITHUB_APP_SCOPES = ["gist", "read:org", "repo"].join(" ")
 
 export async function getDeviceCode(): Promise<DeviceCodeResponse> {
   const response = await fetch(`${GITHUB_BASE_URL}/login/device/code`, {
