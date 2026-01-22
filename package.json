@@ -1,0 +1,27 @@
+{
+  "name": "copilot-router",
+  "version": "1.0.0",
+  "description": "GitHub Copilot API with OpenAI, Anthropic, and Gemini compatibility",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "@hono/zod-openapi": "^0.18.4",
+    "consola": "^3.4.0",
+    "dotenv": "^17.2.3",
+    "fetch-event-stream": "^0.1.5",
+    "hono": "^4.6.16",
+    "mssql": "^11.0.1",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/mssql": "^9.1.8",
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
