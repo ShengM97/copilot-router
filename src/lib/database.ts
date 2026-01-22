@@ -3,8 +3,8 @@ import consola from "consola"
 
 // SQL Server configuration for Azure AD Default authentication
 const sqlConfig: sql.config = {
-  server: process.env.DB_SERVER || "adsai.database.windows.net",
-  database: process.env.DB_DATABASE || "SmartRepo_test",
+  server: process.env.DB_SERVER,
+  database: process.env.DB_DATABASE,
   options: {
     encrypt: true, // Required for Azure
     trustServerCertificate: false,
@@ -18,47 +18,66 @@ const sqlConfig: sql.config = {
 let pool: sql.ConnectionPool | null = null
 
 /**
- * Initialize database connection and create tables if not exist
+ * Check if database configuration is provided
  */
-export async function initializeDatabase(): Promise<void> {
+export function isDatabaseConfigured(): boolean {
+  return !!(process.env.DB_SERVER && process.env.DB_DATABASE)
+}
+
+/**
+ * Check if database is connected
+ */
+export function isDatabaseConnected(): boolean {
+  return pool !== null
+}
+
+/**
+ * Initialize database connection and create tables if not exist
+ * Returns true if database was initialized, false if skipped (no config)
+ */
+export async function initializeDatabase(): Promise<boolean> {
+  // Skip if database is not configured
+  if (!isDatabaseConfigured()) {
+    consola.info("Database not configured, using memory-only mode")
+    return false
+  }
+
   try {
     consola.info(`Connecting to ${sqlConfig.server}/${sqlConfig.database}...`)
     pool = await sql.connect(sqlConfig)
     consola.success("Connected to SQL Server")
 
-    // Create tokens table if not exists
-    // Note: username is unique (one token per user), github_token is not unique (can be updated)
+    // Check if GithubTokens table exists, if not create it
+    // If table exists, use it directly (fields are guaranteed to be correct)
     await pool.request().query(`
-      IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='github_tokens' AND xtype='U')
-      CREATE TABLE github_tokens (
-        id INT IDENTITY(1,1) PRIMARY KEY,
-        github_token NVARCHAR(500) NOT NULL,
-        username NVARCHAR(100) UNIQUE,
-        copilot_token NVARCHAR(MAX),
-        copilot_token_expires_at DATETIME,
-        account_type NVARCHAR(50) DEFAULT 'individual',
-        is_active BIT DEFAULT 1,
-        created_at DATETIME DEFAULT GETDATE(),
-        updated_at DATETIME DEFAULT GETDATE()
-      )
+      IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='GithubTokens' AND xtype='U')
+      BEGIN
+        CREATE TABLE GithubTokens (
+          id INT IDENTITY(1,1) PRIMARY KEY,
+          Token NVARCHAR(500) NOT NULL,
+          UserName NVARCHAR(100) UNIQUE,
+          AccountType NVARCHAR(50) DEFAULT 'individual',
+          IsActive BIT DEFAULT 1
+        )
+      END
     `)
 
-    // Drop old unique constraint on github_token if exists and add on username
+    // Drop old unique constraint on Token if exists
     await pool.request().query(`
       BEGIN TRY
-        -- Try to drop the old unique constraint on github_token
+        -- Try to drop the old unique constraint on Token
         DECLARE @constraintName NVARCHAR(200)
         SELECT @constraintName = name FROM sys.key_constraints 
-        WHERE parent_object_id = OBJECT_ID('github_tokens') 
+        WHERE parent_object_id = OBJECT_ID('GithubTokens') 
         AND type = 'UQ' 
-        AND OBJECT_NAME(parent_object_id) = 'github_tokens'
+        AND OBJECT_NAME(parent_object_id) = 'GithubTokens'
         AND EXISTS (
           SELECT 1 FROM sys.index_columns ic 
           INNER JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
-          WHERE ic.object_id = OBJECT_ID('github_tokens') AND c.name = 'github_token'
+          WHERE ic.object_id = OBJECT_ID('GithubTokens') AND c.name = 'Token'
         )
         IF @constraintName IS NOT NULL
-          EXEC('ALTER TABLE github_tokens DROP CONSTRAINT ' + @constraintName)
+          EXEC('ALTER TABLE GithubTokens DROP CONSTRAINT ' + @constraintName)
       END TRY
       BEGIN CATCH
         -- Ignore errors
@@ -66,6 +85,7 @@ export async function initializeDatabase(): Promise<void> {
     `)
 
     consola.success("Database tables initialized")
+    return true
   } catch (error) {
     consola.error("Failed to connect to SQL Server:", error)
     throw error
@@ -87,14 +107,10 @@ export function getPool(): sql.ConnectionPool {
  */
 export interface TokenRecord {
   id: number
-  github_token: string
-  username: string | null
-  copilot_token: string | null
-  copilot_token_expires_at: Date | null
-  account_type: string
-  is_active: boolean
-  created_at: Date
-  updated_at: Date
+  Token: string
+  UserName: string | null
+  AccountType: string
+  IsActive: boolean
 }
 
 /**
@@ -103,7 +119,7 @@ export interface TokenRecord {
 export async function getAllTokens(): Promise<TokenRecord[]> {
   const pool = getPool()
   const result = await pool.request().query<TokenRecord>(`
-    SELECT * FROM github_tokens WHERE is_active = 1
+    SELECT * FROM GithubTokens WHERE IsActive = 1
   `)
   return result.recordset
 }
@@ -115,7 +131,7 @@ export async function getTokenById(id: number): Promise<TokenRecord | null> {
   const pool = getPool()
   const result = await pool.request()
     .input("id", sql.Int, id)
-    .query<TokenRecord>(`SELECT * FROM github_tokens WHERE id = @id`)
+    .query<TokenRecord>(`SELECT * FROM GithubTokens WHERE id = @id`)
   return result.recordset[0] || null
 }
 
@@ -125,8 +141,8 @@ export async function getTokenById(id: number): Promise<TokenRecord | null> {
 export async function getTokenByGithubToken(githubToken: string): Promise<TokenRecord | null> {
   const pool = getPool()
   const result = await pool.request()
-    .input("github_token", sql.NVarChar, githubToken)
-    .query<TokenRecord>(`SELECT * FROM github_tokens WHERE github_token = @github_token`)
+    .input("Token", sql.NVarChar, githubToken)
+    .query<TokenRecord>(`SELECT * FROM GithubTokens WHERE Token = @Token`)
   return result.recordset[0] || null
 }
 
@@ -140,42 +156,20 @@ export async function saveToken(
 ): Promise<number> {
   const pool = getPool()
   const result = await pool.request()
-    .input("github_token", sql.NVarChar, githubToken)
-    .input("username", sql.NVarChar, username || null)
-    .input("account_type", sql.NVarChar, accountType)
+    .input("Token", sql.NVarChar, githubToken)
+    .input("UserName", sql.NVarChar, username || null)
+    .input("AccountType", sql.NVarChar, accountType)
     .query(`
-      MERGE github_tokens AS target
-      USING (SELECT @username AS username) AS source
-      ON target.username = source.username
+      MERGE GithubTokens AS target
+      USING (SELECT @UserName AS UserName) AS source
+      ON target.UserName = source.UserName
       WHEN MATCHED THEN
-        UPDATE SET github_token = @github_token, account_type = @account_type, is_active = 1, updated_at = GETDATE()
+        UPDATE SET Token = @Token, AccountType = @AccountType, IsActive = 1
       WHEN NOT MATCHED THEN
-        INSERT (github_token, username, account_type) VALUES (@github_token, @username, @account_type)
+        INSERT (Token, UserName, AccountType) VALUES (@Token, @UserName, @AccountType)
       OUTPUT inserted.id;
     `)
   return result.recordset[0]?.id
-}
-
-/**
- * Update Copilot token for a GitHub token
- */
-export async function updateCopilotToken(
-  id: number,
-  copilotToken: string,
-  expiresAt: Date
-): Promise<void> {
-  const pool = getPool()
-  await pool.request()
-    .input("id", sql.Int, id)
-    .input("copilot_token", sql.NVarChar, copilotToken)
-    .input("expires_at", sql.DateTime, expiresAt)
-    .query(`
-      UPDATE github_tokens 
-      SET copilot_token = @copilot_token, 
-          copilot_token_expires_at = @expires_at,
-          updated_at = GETDATE()
-      WHERE id = @id
-    `)
 }
 
 /**
@@ -188,12 +182,11 @@ export async function updateGithubToken(
   const pool = getPool()
   await pool.request()
     .input("id", sql.Int, id)
-    .input("github_token", sql.NVarChar, githubToken)
+    .input("Token", sql.NVarChar, githubToken)
     .query(`
-      UPDATE github_tokens 
-      SET github_token = @github_token, 
-          is_active = 1,
-          updated_at = GETDATE()
+      UPDATE GithubTokens 
+      SET Token = @Token, 
+          IsActive = 1
       WHERE id = @id
     `)
 }
@@ -205,25 +198,15 @@ export async function deactivateToken(id: number): Promise<void> {
   const pool = getPool()
   await pool.request()
     .input("id", sql.Int, id)
-    .query(`UPDATE github_tokens SET is_active = 0, updated_at = GETDATE() WHERE id = @id`)
+    .query(`UPDATE GithubTokens SET IsActive = 0 WHERE id = @id`)
 }
 
 /**
- * Delete a token
- */
-export async function deleteToken(id: number): Promise<void> {
-  const pool = getPool()
-  await pool.request()
-    .input("id", sql.Int, id)
-    .query(`DELETE FROM github_tokens WHERE id = @id`)
-}
-
-/**
- * Delete all tokens (for cleanup)
+ * Delete all tokens (soft delete - sets IsActive = 0 for all records)
  */
 export async function deleteAllTokens(): Promise<number> {
   const pool = getPool()
-  const result = await pool.request().query(`DELETE FROM github_tokens`)
+  const result = await pool.request().query(`UPDATE GithubTokens SET IsActive = 0 WHERE IsActive = 1`)
   return result.rowsAffected[0] || 0
 }
 

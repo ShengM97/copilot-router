@@ -1,12 +1,11 @@
 import consola from "consola"
-import { randomUUID } from "node:crypto"
 
 import {
   getAllTokens,
   saveToken,
   updateGithubToken,
-  getTokenById,
   deactivateToken,
+  isDatabaseConnected,
   type TokenRecord,
 } from "./database"
 import { getGitHubUserForToken } from "~/services/github/get-user"
@@ -35,6 +34,7 @@ export interface TokenEntry {
 class TokenManager {
   private tokens: Map<number, TokenEntry> = new Map()
   private roundRobinIndex: number = 0
+  private nextMemoryId: number = 1 // For generating IDs in memory-only mode
 
   /**
    * Get all token entries
@@ -74,7 +74,7 @@ class TokenManager {
     this.roundRobinIndex = this.roundRobinIndex % activeTokens.length
     const token = activeTokens[this.roundRobinIndex]
     this.roundRobinIndex++
-    
+
     token.lastUsed = new Date()
     token.requestCount++
     return token
@@ -88,24 +88,33 @@ class TokenManager {
   }
 
   /**
-   * Load tokens from database
+   * Load tokens from database (only if database is connected)
    */
   async loadFromDatabase(): Promise<void> {
+    if (!isDatabaseConnected()) {
+      consola.info("Database not connected, starting with empty token list")
+      return
+    }
+
     const dbTokens = await getAllTokens()
-    
+
     for (const record of dbTokens) {
       const entry: TokenEntry = {
         id: record.id,
-        githubToken: record.github_token,
-        username: record.username,
-        copilotToken: record.copilot_token,
-        copilotTokenExpiresAt: record.copilot_token_expires_at,
-        accountType: record.account_type,
-        isActive: record.is_active,
+        githubToken: record.Token,
+        username: record.UserName,
+        copilotToken: null,
+        copilotTokenExpiresAt: null,
+        accountType: record.AccountType,
+        isActive: record.IsActive,
         requestCount: 0,
         errorCount: 0,
       }
       this.tokens.set(record.id, entry)
+      // Update nextMemoryId to avoid conflicts
+      if (record.id >= this.nextMemoryId) {
+        this.nextMemoryId = record.id + 1
+      }
     }
 
     consola.info(`Loaded ${this.tokens.size} tokens from database`)
@@ -129,17 +138,25 @@ class TokenManager {
       existingEntry.githubToken = githubToken
       existingEntry.isActive = true
       existingEntry.errorCount = 0
-      
-      // Update in database
-      await updateGithubToken(existingEntry.id, githubToken)
-      
+
+      // Update in database if connected
+      if (isDatabaseConnected()) {
+        await updateGithubToken(existingEntry.id, githubToken)
+      }
+
       consola.info(`Updated token for existing user: ${username}`)
       return existingEntry
     }
 
-    // Save to database
-    const id = await saveToken(githubToken, username, accountType)
-    consola.debug(`addToken: Saved new token with ID ${id}`)
+    // Generate ID - from database or memory
+    let id: number
+    if (isDatabaseConnected()) {
+      id = await saveToken(githubToken, username, accountType)
+      consola.debug(`addToken: Saved new token with ID ${id}`)
+    } else {
+      id = this.nextMemoryId++
+      consola.debug(`addToken: Generated memory ID ${id}`)
+    }
 
     // Create token entry
     const entry: TokenEntry = {
@@ -167,9 +184,12 @@ class TokenManager {
     const entry = this.tokens.get(id)
     if (!entry) return false
 
-    await deactivateToken(id)
+    // Deactivate in database if connected
+    if (isDatabaseConnected()) {
+      await deactivateToken(id)
+    }
     this.tokens.delete(id)
-    
+
     consola.info(`Removed token for user: ${entry.username}`)
     return true
   }
@@ -178,10 +198,13 @@ class TokenManager {
    * Remove all tokens (for cleanup)
    */
   async removeAllTokens(): Promise<void> {
-    const { deleteAllTokens } = await import("./database")
-    const count = await deleteAllTokens()
+    if (isDatabaseConnected()) {
+      const { deleteAllTokens } = await import("./database")
+      const count = await deleteAllTokens()
+      consola.info(`Removed ${count} tokens from database`)
+    }
     this.tokens.clear()
-    consola.info(`Removed ${count} tokens`)
+    consola.info("Cleared all tokens from memory")
   }
 
   /**
