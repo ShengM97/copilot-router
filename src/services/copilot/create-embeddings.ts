@@ -6,12 +6,10 @@ export const createEmbeddings = async (payload: EmbeddingRequest, tokenEntry?: T
   // Get token entry - use provided one or get random for load balancing
   const entry = tokenEntry || tokenManager.getRandomTokenEntry()
   if (!entry) throw new Error("No active tokens available")
-
-  const vsCodeVersion = tokenManager.getVSCodeVersion()
   
   const response = await fetch(`${copilotBaseUrlForEntry(entry)}/embeddings`, {
     method: "POST",
-    headers: copilotHeadersForEntry(entry, vsCodeVersion),
+    headers: copilotHeadersForEntry(entry),
     body: JSON.stringify(payload),
   })
 

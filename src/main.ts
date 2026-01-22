@@ -33,7 +33,6 @@ async function main() {
   const tokenCount = tokenManager.getTokenCount()
   if (tokenCount.total > 0) {
     consola.info(`Found ${tokenCount.total} tokens, refreshing Copilot tokens...`)
-    await tokenManager.refreshAllCopilotTokens()
     const updatedCount = tokenManager.getTokenCount()
     consola.success(`${updatedCount.active} tokens active`)
   } else {
@@ -82,13 +81,6 @@ async function main() {
       description: "GitHub Copilot API with OpenAI, Anthropic, and Gemini compatibility",
     },
   })
-
-  // Start token refresh interval
-  setInterval(() => {
-    tokenManager.refreshAllCopilotTokens().catch((error) => {
-      consola.error("Failed to refresh tokens:", error)
-    })
-  }, TOKEN_REFRESH_INTERVAL)
 
   // Start server
   consola.info(`Starting server on port ${PORT}...`)

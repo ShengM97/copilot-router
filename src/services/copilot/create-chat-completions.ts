@@ -23,9 +23,8 @@ export const createChatCompletions = async (
     ["assistant", "tool"].includes(msg.role),
   )
 
-  const vsCodeVersion = tokenManager.getVSCodeVersion()
   const headers: Record<string, string> = {
-    ...copilotHeadersForEntry(entry, vsCodeVersion, enableVision),
+    ...copilotHeadersForEntry(entry, enableVision),
     "X-Initiator": isAgentCall ? "agent" : "user",
   }
 

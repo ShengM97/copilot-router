@@ -190,25 +190,6 @@ export function registerAuthRoutes(app: OpenAPIHono) {
     }
   })
 
-  // POST /auth/refresh - Refresh all Copilot tokens
-  app.post("/auth/refresh", async (c) => {
-    try {
-      await tokenManager.refreshAllCopilotTokens()
-      const counts = tokenManager.getTokenCount()
-
-      return c.json({
-        message: "Tokens refreshed successfully",
-        refreshed: counts.active,
-      })
-    } catch (error) {
-      consola.error("Failed to refresh tokens:", error)
-      return c.json(
-        { error: { message: "Failed to refresh tokens", type: "error" } },
-        500
-      )
-    }
-  })
-
   // POST /auth/tokens - Add token directly
   app.post("/auth/tokens", async (c) => {
     try {

@@ -1,6 +1,3 @@
-import { randomUUID } from "node:crypto"
-
-import type { State } from "./state"
 import type { TokenEntry } from "./token-manager"
 
 export const standardHeaders = () => ({
@@ -8,10 +5,7 @@ export const standardHeaders = () => ({
   accept: "application/json",
 })
 
-const COPILOT_VERSION = "0.26.7"
-const EDITOR_PLUGIN_VERSION = `copilot-chat/${COPILOT_VERSION}`
-const USER_AGENT = `copilot/0.0.388 (linux v24.11.1) term/unknown`
-
+const COPILOT_VERSION = "0.0.388"
 const API_VERSION = "2025-05-01"
 
 /**
@@ -26,12 +20,12 @@ export const copilotBaseUrlForEntry = (entry: TokenEntry) =>
  * Create headers for a token entry
  * Note: Using GitHub Access Token directly instead of Copilot Token
  */
-export const copilotHeadersForEntry = (entry: TokenEntry, vsCodeVersion: string, vision: boolean = false) => {
+export const copilotHeadersForEntry = (entry: TokenEntry, vision: boolean = false) => {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${entry.githubToken}`,
     "content-type": standardHeaders()["content-type"],
     "copilot-integration-id": "copilot-developer-cli",
-    "user-agent": "copilot/0.0.388 (linux v24.11.1) term/unknown",
+    "user-agent": `copilot/${COPILOT_VERSION} (linux v24.11.1) term/unknown`,
     "openai-intent": "conversation-agent",
     "x-github-api-version": API_VERSION,
   }

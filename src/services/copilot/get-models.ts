@@ -7,10 +7,8 @@ export const getModels = async (tokenEntry?: TokenEntry) => {
   const entry = tokenEntry || tokenManager.getActiveTokenEntries()[0]
   if (!entry) throw new Error("No active tokens available")
 
-  const vsCodeVersion = tokenManager.getVSCodeVersion()
-
   const response = await fetch(`${copilotBaseUrlForEntry(entry)}/models`, {
-    headers: copilotHeadersForEntry(entry, vsCodeVersion),
+    headers: copilotHeadersForEntry(entry),
   })
 
   if (!response.ok) {

@@ -35,14 +35,6 @@ export interface TokenEntry {
 class TokenManager {
   private tokens: Map<number, TokenEntry> = new Map()
   private roundRobinIndex: number = 0
-  private vsCodeVersion: string = "1.96.2"
-
-  /**
-   * Get VS Code version
-   */
-  getVSCodeVersion(): string {
-    return this.vsCodeVersion
-  }
 
   /**
    * Get all token entries
@@ -166,22 +158,6 @@ class TokenManager {
 
     consola.success(`Added token for user: ${username}`)
     return entry
-  }
-
-  /**
-   * Refresh Copilot token for a specific entry
-   * @deprecated No longer used - using GitHub Access Token directly
-   */
-  async refreshCopilotTokenForEntry(entry: TokenEntry): Promise<void> {
-    consola.debug(`refreshCopilotTokenForEntry is deprecated - using GitHub Access Token directly for ${entry.username}`)
-  }
-
-  /**
-   * Refresh all Copilot tokens
-   * @deprecated No longer used - using GitHub Access Token directly
-   */
-  async refreshAllCopilotTokens(): Promise<void> {
-    consola.debug(`refreshAllCopilotTokens is deprecated - using GitHub Access Token directly`)
   }
 
   /**
