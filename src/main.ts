@@ -36,7 +36,7 @@ async function main() {
     const updatedCount = tokenManager.getTokenCount()
     consola.success(`${updatedCount.active} tokens active`)
   } else {
-    consola.warn("No tokens found in database. Use /auth/login to add tokens.")
+    consola.warn("No tokens found. Use /auth/login to add tokens or run 'gh auth login'.")
   }
 
   // Create OpenAPI Hono app

@@ -1,4 +1,6 @@
 import consola from "consola"
+import { exec } from "child_process"
+import { promisify } from "util"
 
 import {
   getAllTokens,
@@ -10,6 +12,27 @@ import {
 } from "./database"
 import { getGitHubUserForToken } from "~/services/github/get-user"
 import type { ModelsResponse } from "~/services/copilot/get-models"
+
+const execAsync = promisify(exec)
+
+/**
+ * Get the local GitHub auth token from gh CLI
+ * Returns null if gh is not installed or not authenticated
+ */
+async function getLocalGhAuthToken(): Promise<string | null> {
+  try {
+    const { stdout } = await execAsync("gh auth token")
+    const token = stdout.trim()
+    if (token && token.startsWith("gho_")) {
+      consola.debug(`Found local gh auth token: ${token.substring(0, 15)}...`)
+      return token
+    }
+    return null
+  } catch (error) {
+    consola.debug("Failed to get local gh auth token:", error instanceof Error ? error.message : error)
+    return null
+  }
+}
 
 /**
  * Token entry with runtime state
@@ -89,10 +112,12 @@ class TokenManager {
 
   /**
    * Load tokens from database (only if database is connected)
+   * If database is not connected, try to load from local gh auth
    */
   async loadFromDatabase(): Promise<void> {
     if (!isDatabaseConnected()) {
-      consola.info("Database not connected, starting with empty token list")
+      consola.info("Database not connected, trying to load local gh auth token...")
+      await this.loadFromLocalGhAuth()
       return
     }
 
@@ -118,6 +143,25 @@ class TokenManager {
     }
 
     consola.info(`Loaded ${this.tokens.size} tokens from database`)
+  }
+
+  /**
+   * Load token from local gh auth CLI
+   * This is used when database is not configured
+   */
+  async loadFromLocalGhAuth(): Promise<void> {
+    const ghToken = await getLocalGhAuthToken()
+    if (!ghToken) {
+      consola.info("No local gh auth token found. Use /auth/login to add tokens or run 'gh auth login'.")
+      return
+    }
+
+    try {
+      await this.addToken(ghToken, "individual")
+      consola.success("Loaded token from local gh auth")
+    } catch (error) {
+      consola.warn("Failed to add local gh auth token:", error instanceof Error ? error.message : error)
+    }
   }
 
   /**
