@@ -1,18 +1,72 @@
 import sql from "mssql"
 import consola from "consola"
 
-// SQL Server configuration for Azure AD Default authentication
+interface DbConnectionConfig {
+  server: string
+  database: string
+  authentication: string
+  userId?: string
+}
+
+/**
+ * Parse connection string to extract server, database, authentication type and user id
+ * Supported formats:
+ * - Server=xxx;Database=xxx;Authentication=Active Directory Default
+ * - Server=xxx;Database=xxx;User Id=xxx;Authentication=Active Directory Managed Identity
+ */
+function parseConnectionString(connectionString: string): DbConnectionConfig | null {
+  if (!connectionString) return null
+  
+  const serverMatch = connectionString.match(/Server=([^;]+)/i)
+  const databaseMatch = connectionString.match(/Database=([^;]+)/i)
+  const authMatch = connectionString.match(/Authentication=([^;]+)/i)
+  const userIdMatch = connectionString.match(/User Id=([^;]+)/i)
+  
+  if (!serverMatch || !databaseMatch) return null
+  
+  return {
+    server: serverMatch[1],
+    database: databaseMatch[1],
+    authentication: authMatch?.[1] || "Active Directory Default",
+    userId: userIdMatch?.[1]
+  }
+}
+
+/**
+ * Build mssql authentication config based on connection string authentication type
+ */
+function buildAuthConfig(dbConfig: DbConnectionConfig): sql.config["authentication"] {
+  const authType = dbConfig.authentication.toLowerCase()
+  
+  // Active Directory Managed Identity
+  if (authType.includes("managed identity")) {
+    return {
+      type: "azure-active-directory-msi-app-service",
+      options: {
+        clientId: dbConfig.userId
+      }
+    }
+  }
+  
+  // Active Directory Default (default fallback)
+  return {
+    type: "azure-active-directory-default",
+    options: {}
+  }
+}
+
+// Parse connection string
+const dbConfig = parseConnectionString(process.env.DB_CONNECTION_STRING || "")
+
+// SQL Server configuration
 const sqlConfig: sql.config = {
-  server: process.env.DB_SERVER,
-  database: process.env.DB_DATABASE,
+  server: dbConfig?.server || "",
+  database: dbConfig?.database || "",
   options: {
     encrypt: true, // Required for Azure
     trustServerCertificate: false,
   },
-  authentication: {
-    type: "azure-active-directory-default",
-    options: {}
-  }
+  authentication: dbConfig ? buildAuthConfig(dbConfig) : undefined
 }
 
 let pool: sql.ConnectionPool | null = null
@@ -21,7 +75,7 @@ let pool: sql.ConnectionPool | null = null
  * Check if database configuration is provided
  */
 export function isDatabaseConfigured(): boolean {
-  return !!(process.env.DB_SERVER && process.env.DB_DATABASE)
+  return !!dbConfig
 }
 
 /**
@@ -106,7 +160,7 @@ export function getPool(): sql.ConnectionPool {
  * Token record from database
  */
 export interface TokenRecord {
-  id: number
+  Id: number
   Token: string
   UserName: string | null
   AccountType: string
