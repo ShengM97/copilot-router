@@ -16,8 +16,8 @@
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "start": "tsx src/main.ts",
-    "build": "tsc || true; tsc-alias --resolve-full-paths && npm run build:postprocess",
-    "build:postprocess": "node -e \"const fs = require('fs'); let cli = fs.readFileSync('./dist/cli.js', 'utf8'); if (!cli.startsWith('#!')) { cli = '#!/usr/bin/env node\\n' + cli; fs.writeFileSync('./dist/cli.js', cli); }\" && chmod +x dist/cli.js",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc && tsc-alias --resolve-full-paths && node scripts/post-build.cjs",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
