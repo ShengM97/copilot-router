@@ -142,7 +142,7 @@ export function registerAnthropicRoutes(app: OpenAPIHono) {
         }
       })
     } catch (error) {
-      return await forwardError(c, error)
+      return await forwardError(c, error) as any
     }
   })
 
@@ -169,7 +169,7 @@ export function registerAnthropicRoutes(app: OpenAPIHono) {
       const estimatedTokens = Math.ceil(totalChars / 4)
       return c.json({ input_tokens: estimatedTokens })
     } catch (error) {
-      return await forwardError(c, error)
+      return await forwardError(c, error) as any
     }
   })
 }

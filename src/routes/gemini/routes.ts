@@ -184,7 +184,7 @@ export function registerGeminiRoutes(app: OpenAPIHono) {
         }
       })
     } catch (error) {
-      return await forwardError(c, error)
+      return await forwardError(c, error) as any
     }
   })
 }

@@ -172,7 +172,7 @@ export function registerOpenAIRoutes(app: OpenAPIHono) {
         }
       })
     } catch (error) {
-      return await forwardError(c, error)
+      return await forwardError(c, error) as any
     }
   })
 
@@ -224,7 +224,7 @@ export function registerOpenAIRoutes(app: OpenAPIHono) {
         has_more: false,
       })
     } catch (error) {
-      return await forwardError(c, error)
+      return await forwardError(c, error) as any
     }
   })
 
@@ -235,7 +235,7 @@ export function registerOpenAIRoutes(app: OpenAPIHono) {
       const response = await createEmbeddings(payload)
       return c.json(response)
     } catch (error) {
-      return await forwardError(c, error)
+      return await forwardError(c, error) as any
     }
   })
 }

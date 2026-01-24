@@ -13,7 +13,21 @@ GitHub Copilot API with OpenAI, Anthropic, and Gemini compatibility. Supports **
 - **OpenAI, Anthropic, and Gemini compatibility**: Use familiar APIs
 - **OpenAPI documentation**: Auto-generated API docs at `/openapi.json`
 
-## Setup
+## Quick Start
+
+The fastest way to run Copilot Router without cloning the repository:
+
+```bash
+npx copilot-router@latest start
+```
+
+With custom port:
+
+```bash
+npx copilot-router@latest start --port 8080
+```
+
+## Setup (Development)
 
 ### 1. Configure Environment
 
@@ -35,7 +49,7 @@ PORT=4242
 - `Active Directory Default` - Uses system's default Azure AD auth
 - `Active Directory Managed Identity` - Uses Azure Managed Identity (requires `User Id` for client-id)
 
-> **Note**: If `DB_CONNECTION_STRING` is not provided, the server runs in memory-only mode.
+> **Note**: If `DB_CONNECTION_STRING` is not provided, the server runs in memory-only mode. In memory-only mode, the server will automatically detect and use your local `gh auth` token if available.
 
 ### 2. Install Dependencies
 

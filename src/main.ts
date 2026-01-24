@@ -6,6 +6,9 @@ import { OpenAPIHono } from "@hono/zod-openapi"
 import { cors } from "hono/cors"
 import { logger } from "hono/logger"
 import consola from "consola"
+import { join } from "path"
+import { fileURLToPath } from "url"
+import { dirname } from "path"
 
 import { initializeDatabase } from "~/lib/database"
 import { tokenManager } from "~/lib/token-manager"
@@ -17,6 +20,13 @@ import { registerAuthRoutes } from "~/routes/auth/routes"
 
 const PORT = parseInt(process.env.PORT || "4242", 10)
 const TOKEN_REFRESH_INTERVAL = 25 * 60 * 1000 // 25 minutes
+
+// Get the package root directory (for static files)
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+// When running via npx, COPILOT_ROUTER_ROOT is set by CLI; otherwise use relative path
+const PACKAGE_ROOT = process.env.COPILOT_ROUTER_ROOT || join(__dirname, "..")
+const PUBLIC_DIR = join(PACKAGE_ROOT, "public")
 
 async function main() {
   consola.info("Starting Copilot Router...")
@@ -69,8 +79,8 @@ async function main() {
   app.route("/v1beta", geminiRouter)      // /v1beta/models/:model:generateContent
 
   // Serve static files (login page)
-  app.use("/static/*", serveStatic({ root: "./public", rewriteRequestPath: (path) => path.replace("/static", "") }))
-  app.get("/login", serveStatic({ path: "./public/index.html" }))
+  app.use("/static/*", serveStatic({ root: PUBLIC_DIR, rewriteRequestPath: (path) => path.replace("/static", "") }))
+  app.get("/login", serveStatic({ path: join(PUBLIC_DIR, "index.html") }))
 
   // OpenAPI documentation
   app.doc("/openapi.json", {
