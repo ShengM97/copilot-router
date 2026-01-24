@@ -5,33 +5,37 @@ GitHub Copilot API with OpenAI, Anthropic, and Gemini compatibility. Supports **
 ## Features
 
 - **Multi-token support**: Add multiple GitHub accounts for load balancing
-- **SQL Server storage**: Persist tokens across restarts
-- **VSCode-style login**: Use device code flow to authenticate
+- **SQL Server storage**: Persist tokens across restarts (supports Azure AD authentication)
+- **Memory-only mode**: Works without database configuration
+- **GitHub Device Code flow**: Use device code flow to authenticate
+- **Web UI**: User-friendly login page for managing tokens
 - **Load balancing**: Randomly distribute requests across active tokens
 - **OpenAI, Anthropic, and Gemini compatibility**: Use familiar APIs
+- **OpenAPI documentation**: Auto-generated API docs at `/openapi.json`
 
 ## Setup
 
-### 1. Configure SQL Server
+### 1. Configure Environment
 
-Copy the example environment file and configure your SQL Server connection:
+Copy the example environment file:
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` with your SQL Server credentials:
+Edit `.env` with your configuration:
 
 ```env
-DB_SERVER=localhost
-DB_PORT=1433
-DB_USER=sa
-DB_PASSWORD=your_password_here
-DB_NAME=copilot_router
-DB_ENCRYPT=false
-DB_TRUST_SERVER_CERTIFICATE=true
+# SQL Server connection string (optional - uses memory mode if not provided)
+DB_CONNECTION_STRING=Server=localhost;Database=copilot_router;Authentication=Active Directory Default
 PORT=4242
 ```
+
+**Supported Authentication Types:**
+- `Active Directory Default` - Uses system's default Azure AD auth
+- `Active Directory Managed Identity` - Uses Azure Managed Identity (requires `User Id` for client-id)
+
+> **Note**: If `DB_CONNECTION_STRING` is not provided, the server runs in memory-only mode.
 
 ### 2. Install Dependencies
 
@@ -44,6 +48,19 @@ npm install
 ```bash
 npm run dev
 ```
+
+Or for production:
+
+```bash
+npm start
+```
+
+## Web UI
+
+Access the login UI at `http://localhost:4242/login` to:
+- Login via GitHub Device Code flow
+- Add tokens directly
+- Manage existing tokens
 
 ## Authentication
 
@@ -73,9 +90,19 @@ curl -X POST http://localhost:4242/auth/complete \
   -H "Content-Type: application/json" \
   -d '{
     "device_code": "...",
-    "interval": 5,
-    "expires_in": 900
+    "account_type": "individual"
   }'
+```
+
+Response:
+```json
+{
+  "status": "success",
+  "id": 1,
+  "username": "your-username",
+  "account_type": "individual",
+  "message": "Successfully logged in as your-username"
+}
 ```
 
 ### Method 2: Direct Token Input
@@ -103,19 +130,21 @@ curl http://localhost:4242/auth/tokens
 curl -X DELETE http://localhost:4242/auth/tokens/1
 ```
 
-**Refresh all tokens**:
+**Delete all tokens**:
 ```bash
-curl -X POST http://localhost:4242/auth/refresh
+curl -X DELETE http://localhost:4242/auth/tokens/all
 ```
 
 ## API Endpoints
 
 ### OpenAI-Compatible
 
-- `POST /v1/chat/completions` - Chat completion (load balanced)
-- `GET /v1/models` - List models
-- `GET /v1/models?grouped=true` - List models grouped by token
-- `POST /v1/embeddings` - Create embeddings (load balanced)
+Available at both root (`/`) and versioned (`/v1`) paths:
+
+- `POST /chat/completions` or `POST /v1/chat/completions` - Chat completion (load balanced)
+- `GET /models` or `GET /v1/models` - List models
+- `GET /models?grouped=true` or `GET /v1/models?grouped=true` - List models grouped by token
+- `POST /embeddings` or `POST /v1/embeddings` - Create embeddings (load balanced)
 
 ### Anthropic-Compatible
 
@@ -132,9 +161,17 @@ curl -X POST http://localhost:4242/auth/refresh
 
 - `GET /` - Health check with token count
 - `GET /token` - List active tokens with Copilot token info
-- `GET /usage` - Get usage stats
-- `GET /usage?grouped=true` - Get usage grouped by token
-- `GET /quota` - Get quota for all tokens
+- `GET /login` - Web UI for token management
+- `GET /openapi.json` - OpenAPI documentation
+
+### Auth
+
+- `POST /auth/login` - Start device code flow
+- `POST /auth/complete` - Complete device code authentication
+- `GET /auth/tokens` - List all tokens with statistics
+- `POST /auth/tokens` - Add token directly
+- `DELETE /auth/tokens/:id` - Delete a specific token
+- `DELETE /auth/tokens/all` - Delete all tokens
 
 ## Load Balancing
 
@@ -152,39 +189,38 @@ Response includes:
 - `request_count` - Total requests made with this token
 - `error_count` - Number of errors
 - `last_used` - Last time the token was used
+- `has_copilot_token` - Whether the Copilot token is valid
+- `copilot_token_expires_at` - Expiration time of the Copilot token
 
 ## Grouped Display
 
-For multi-token setups, you can view models and usage grouped by token:
+For multi-token setups, you can view models grouped by token:
 
 ```bash
 # Models grouped by token
 curl "http://localhost:4242/v1/models?grouped=true"
-
-# Usage grouped by token  
-curl "http://localhost:4242/usage?grouped=true"
-
-# Quota for all tokens
-curl "http://localhost:4242/quota"
 ```
 
 ## Database Schema
 
-The system automatically creates a `github_tokens` table:
+When using SQL Server, the system automatically creates a `GithubTokens` table:
 
 ```sql
-CREATE TABLE github_tokens (
+CREATE TABLE GithubTokens (
   id INT IDENTITY(1,1) PRIMARY KEY,
-  github_token NVARCHAR(500) NOT NULL UNIQUE,
-  username NVARCHAR(100),
-  copilot_token NVARCHAR(MAX),
-  copilot_token_expires_at DATETIME,
-  account_type NVARCHAR(50) DEFAULT 'individual',
-  is_active BIT DEFAULT 1,
-  created_at DATETIME DEFAULT GETDATE(),
-  updated_at DATETIME DEFAULT GETDATE()
+  Token NVARCHAR(500) NOT NULL,
+  UserName NVARCHAR(100) UNIQUE,
+  AccountType NVARCHAR(50) DEFAULT 'individual',
+  IsActive BIT DEFAULT 1
 )
 ```
+
+## Tech Stack
+
+- **Runtime**: Node.js with TypeScript
+- **Framework**: [Hono](https://hono.dev/) with OpenAPI support
+- **Database**: Microsoft SQL Server (optional)
+- **Build Tool**: TSX for development, TypeScript for production
 
 ## License
 
