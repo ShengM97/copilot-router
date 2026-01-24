@@ -100,7 +100,7 @@ class TokenManager {
 
     for (const record of dbTokens) {
       const entry: TokenEntry = {
-        id: record.id,
+        id: record.Id,
         githubToken: record.Token,
         username: record.UserName,
         copilotToken: null,
@@ -110,10 +110,10 @@ class TokenManager {
         requestCount: 0,
         errorCount: 0,
       }
-      this.tokens.set(record.id, entry)
+      this.tokens.set(record.Id, entry)
       // Update nextMemoryId to avoid conflicts
-      if (record.id >= this.nextMemoryId) {
-        this.nextMemoryId = record.id + 1
+      if (record.Id >= this.nextMemoryId) {
+        this.nextMemoryId = record.Id + 1
       }
     }
 

@@ -47,10 +47,23 @@ export function translateToOpenAI(
 }
 
 function translateModelName(model: string): string {
-  if (model.startsWith("claude-sonnet-4-")) {
-    return model.replace(/^claude-sonnet-4-.*/, "claude-sonnet-4")
-  } else if (model.startsWith("claude-opus-")) {
-    return model.replace(/^claude-opus-4-.*/, "claude-opus-4")
+  // Claude models
+  if (model.startsWith("claude-sonne-4.5") || model.startsWith("claude-sonnet-4-5")) {
+    return "claude-sonnet-4.5"
+  } else if (model.startsWith("claude-opus-4.5") || model.startsWith("claude-opus-4-5")) {
+    return "claude-opus-4.5"
+  } else if (model.startsWith("claude-haiku-4.5") || model.startsWith("claude-haiku-4-5")) {
+    return "claude-haiku-4.5"
+  }
+  // GPT models
+  else if (model.startsWith("gpt-5.2-codex") || model.startsWith("gpt-5-2-codex")) {
+    return "gpt-5.2-codex"
+  } else if (model.startsWith("gpt-5.2") || model.startsWith("gpt-5-2")) {
+    return "gpt-5.2"
+  }
+  // Gemini models
+  else if (model.startsWith("gemini-3-pro") || model.startsWith("gemini-3.0-pro")) {
+    return "gemini-3-pro-preview"
   }
   return model
 }
