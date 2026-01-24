@@ -3,14 +3,42 @@
   "version": "1.0.0",
   "description": "GitHub Copilot API with OpenAI, Anthropic, and Gemini compatibility",
   "type": "module",
+  "main": "./dist/main.js",
+  "bin": {
+    "copilot-router": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "public",
+    "package.json",
+    "README.md"
+  ],
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "start": "tsx src/main.ts",
-    "build": "tsc"
+    "build": "tsc || true; tsc-alias --resolve-full-paths && npm run build:postprocess",
+    "build:postprocess": "node -e \"const fs = require('fs'); let cli = fs.readFileSync('./dist/cli.js', 'utf8'); if (!cli.startsWith('#!')) { cli = '#!/usr/bin/env node\\n' + cli; fs.writeFileSync('./dist/cli.js', cli); }\" && chmod +x dist/cli.js",
+    "prepublishOnly": "npm run build"
   },
+  "keywords": [
+    "github",
+    "copilot",
+    "openai",
+    "anthropic",
+    "gemini",
+    "api",
+    "proxy",
+    "router"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ShengM97/copilot-router.git"
+  },
+  "license": "MIT",
   "dependencies": {
     "@hono/node-server": "^1.13.7",
     "@hono/zod-openapi": "^0.18.4",
+    "commander": "^12.1.0",
     "consola": "^3.4.0",
     "dotenv": "^17.2.3",
     "fetch-event-stream": "^0.1.5",
@@ -21,6 +49,7 @@
   "devDependencies": {
     "@types/mssql": "^9.1.8",
     "@types/node": "^22.10.5",
+    "tsc-alias": "^1.8.10",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
