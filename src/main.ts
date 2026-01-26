@@ -60,10 +60,11 @@ async function main() {
   // API Key authentication for protected routes
   // Applies to all API routes: /chat/*, /v1/*, /v1beta/*
   // Does NOT apply to: /, /login, /static/*, /auth/*, /openapi.json
-  app.use("/chat/*", apiKeyAuth())
-  app.use("/v1/*", apiKeyAuth())
-  app.use("/v1beta/*", apiKeyAuth())
-  app.use("/embeddings", apiKeyAuth())
+  const authMiddleware = apiKeyAuth()
+  app.use("/chat/*", authMiddleware)
+  app.use("/v1/*", authMiddleware)
+  app.use("/v1beta/*", authMiddleware)
+  app.use("/embeddings", authMiddleware)
 
   // Register utility routes at root (no auth required for /, /token, /usage, /quota)
   registerUtilityRoutes(app)
