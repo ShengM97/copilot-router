@@ -21,6 +21,8 @@ import { registerAuthRoutes } from "~/routes/auth/routes"
 
 const PORT = parseInt(process.env.PORT || "4242", 10)
 const TOKEN_REFRESH_INTERVAL = 25 * 60 * 1000 // 25 minutes
+const ENVIRONMENT = process.env.ENVIRONMENT || "Development"
+const isProduction = ENVIRONMENT === "Production"
 
 // Get the package root directory (for static files)
 const __filename = fileURLToPath(import.meta.url)
@@ -30,7 +32,7 @@ const PACKAGE_ROOT = process.env.COPILOT_ROUTER_ROOT || join(__dirname, "..")
 const PUBLIC_DIR = join(PACKAGE_ROOT, "public")
 
 async function main() {
-  consola.info("Starting Copilot Router...")
+  consola.info(`Starting Copilot Router in ${ENVIRONMENT} mode...`)
 
   // Initialize database
   consola.info("Connecting to SQL Server...")
@@ -66,11 +68,19 @@ async function main() {
   app.use("/v1beta/*", authMiddleware)
   app.use("/embeddings", authMiddleware)
 
-  // Register utility routes at root (no auth required for /, /token, /usage, /quota)
+  // Register utility routes at root (no auth required for /)
   registerUtilityRoutes(app)
 
   // Register auth routes (no auth required for login flow)
-  registerAuthRoutes(app)
+  // In Production mode, /auth/* endpoints are blocked
+  if (!isProduction) {
+    registerAuthRoutes(app)
+  } else {
+    // Block /auth/* in Production mode
+    app.all("/auth/*", (c) => {
+      return c.json({ error: { message: "This endpoint is disabled in Production mode", type: "forbidden" } }, 403)
+    })
+  }
 
   // OpenAI-compatible routes
   const openaiRouter = new OpenAPIHono()
@@ -90,17 +100,31 @@ async function main() {
 
   // Serve static files (login page)
   app.use("/static/*", serveStatic({ root: PUBLIC_DIR, rewriteRequestPath: (path) => path.replace("/static", "") }))
-  app.get("/login", serveStatic({ path: join(PUBLIC_DIR, "index.html") }))
 
-  // OpenAPI documentation
-  app.doc("/openapi.json", {
-    openapi: "3.0.0",
-    info: {
-      title: "Copilot Router API",
-      version: "1.0.0",
-      description: "GitHub Copilot API with OpenAI, Anthropic, and Gemini compatibility",
-    },
-  })
+  // /login page - disabled in Production mode
+  if (!isProduction) {
+    app.get("/login", serveStatic({ path: join(PUBLIC_DIR, "index.html") }))
+  } else {
+    app.get("/login", (c) => {
+      return c.json({ error: { message: "This endpoint is disabled in Production mode", type: "forbidden" } }, 403)
+    })
+  }
+
+  // OpenAPI documentation - disabled in Production mode
+  if (!isProduction) {
+    app.doc("/openapi.json", {
+      openapi: "3.0.0",
+      info: {
+        title: "Copilot Router API",
+        version: "1.0.0",
+        description: "GitHub Copilot API with OpenAI, Anthropic, and Gemini compatibility",
+      },
+    })
+  } else {
+    app.get("/openapi.json", (c) => {
+      return c.json({ error: { message: "This endpoint is disabled in Production mode", type: "forbidden" } }, 403)
+    })
+  }
 
   // Start server
   consola.info(`Starting server on port ${PORT}...`)
@@ -112,13 +136,19 @@ async function main() {
   consola.success(`Copilot Router running at http://localhost:${PORT}`)
 
   consola.info("Available endpoints:")
-  consola.info("  Web UI:    GET /login")
-  consola.info("  Auth:      POST /auth/login, POST /auth/complete, GET /auth/tokens")
+  if (!isProduction) {
+    consola.info("  Web UI:    GET /login")
+    consola.info("  Auth:      POST /auth/login, POST /auth/complete, GET /auth/tokens")
+  }
   consola.info("  OpenAI:    POST /v1/chat/completions, GET /v1/models, POST /v1/embeddings")
   consola.info("  Anthropic: POST /v1/messages, POST /v1/messages/count_tokens")
   consola.info("  Gemini:    POST /v1beta/models/:model:generateContent")
-  consola.info("  Utility:   GET /, GET /token, GET /usage, GET /quota")
-  consola.info("  Docs:      GET /openapi.json")
+  consola.info("  Utility:   GET /")
+  if (!isProduction) {
+    consola.info("  Docs:      GET /openapi.json")
+  } else {
+    consola.info("  (Production mode: /login, /auth/*, /openapi.json are disabled)")
+  }
 }
 
 main().catch((error) => {
