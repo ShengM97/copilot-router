@@ -71,15 +71,17 @@ async function main() {
   // Register utility routes at root (no auth required for /)
   registerUtilityRoutes(app)
 
+  // Handler for blocked endpoints in Production mode
+  const productionBlockedHandler = (c: any) => {
+    return c.json({ error: { message: "This endpoint is disabled in Production mode", type: "forbidden" } }, 403)
+  }
+
   // Register auth routes (no auth required for login flow)
   // In Production mode, /auth/* endpoints are blocked
   if (!isProduction) {
     registerAuthRoutes(app)
   } else {
-    // Block /auth/* in Production mode
-    app.all("/auth/*", (c) => {
-      return c.json({ error: { message: "This endpoint is disabled in Production mode", type: "forbidden" } }, 403)
-    })
+    app.all("/auth/*", productionBlockedHandler)
   }
 
   // OpenAI-compatible routes
@@ -105,9 +107,7 @@ async function main() {
   if (!isProduction) {
     app.get("/login", serveStatic({ path: join(PUBLIC_DIR, "index.html") }))
   } else {
-    app.get("/login", (c) => {
-      return c.json({ error: { message: "This endpoint is disabled in Production mode", type: "forbidden" } }, 403)
-    })
+    app.get("/login", productionBlockedHandler)
   }
 
   // OpenAPI documentation - disabled in Production mode
@@ -121,9 +121,7 @@ async function main() {
       },
     })
   } else {
-    app.get("/openapi.json", (c) => {
-      return c.json({ error: { message: "This endpoint is disabled in Production mode", type: "forbidden" } }, 403)
-    })
+    app.get("/openapi.json", productionBlockedHandler)
   }
 
   // Start server
