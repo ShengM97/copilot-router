@@ -12,6 +12,7 @@ import { dirname } from "path"
 
 import { initializeDatabase } from "~/lib/database"
 import { tokenManager } from "~/lib/token-manager"
+import { apiKeyAuth, isApiKeyEnabled } from "~/lib/auth-middleware"
 import { registerOpenAIRoutes } from "~/routes/openai/routes"
 import { registerAnthropicRoutes } from "~/routes/anthropic/routes"
 import { registerGeminiRoutes } from "~/routes/gemini/routes"
@@ -56,10 +57,18 @@ async function main() {
   app.use(logger())
   app.use(cors())
 
-  // Register utility routes at root
+  // API Key authentication for protected routes
+  // Applies to all API routes: /chat/*, /v1/*, /v1beta/*
+  // Does NOT apply to: /, /login, /static/*, /auth/*, /openapi.json
+  app.use("/chat/*", apiKeyAuth())
+  app.use("/v1/*", apiKeyAuth())
+  app.use("/v1beta/*", apiKeyAuth())
+  app.use("/embeddings", apiKeyAuth())
+
+  // Register utility routes at root (no auth required for /, /token, /usage, /quota)
   registerUtilityRoutes(app)
 
-  // Register auth routes
+  // Register auth routes (no auth required for login flow)
   registerAuthRoutes(app)
 
   // OpenAI-compatible routes
@@ -100,6 +109,7 @@ async function main() {
   })
 
   consola.success(`Copilot Router running at http://localhost:${PORT}`)
+
   consola.info("Available endpoints:")
   consola.info("  Web UI:    GET /login")
   consola.info("  Auth:      POST /auth/login, POST /auth/complete, GET /auth/tokens")
