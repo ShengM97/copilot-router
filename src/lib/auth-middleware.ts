@@ -23,11 +23,12 @@ function safeCompare(a: string, b: string): boolean {
 /**
  * API Key authentication middleware
  * 
- * This middleware validates the API key from the Authorization header.
- * If API_KEY environment variable is not set, all requests are allowed.
- * If API_KEY is set, requests must include a valid Bearer token that matches.
+ * This middleware validates the API key from various header formats:
+ * - Authorization: Bearer <API_KEY> (OpenAI style)
+ * - x-api-key: <API_KEY> (Anthropic style)
+ * - x-goog-api-key: <API_KEY> (Gemini style)
  * 
- * Expected header format: Authorization: Bearer <API_KEY>
+ * If API_KEY environment variable is not set, all requests are allowed.
  */
 export function apiKeyAuth() {
   const apiKey = process.env.API_KEY
@@ -36,14 +37,36 @@ export function apiKeyAuth() {
     if (!apiKey) {
       return next()
     }
+
+    // Try to extract API key from various headers
+    let providedKey: string | undefined
+
+    // 1. Check Authorization header (OpenAI style: Bearer token)
     const authHeader = c.req.header("Authorization")
-    // Check for Authorization header
-    if (!authHeader) {
-      consola.warn("API request without Authorization header")
+    if (authHeader) {
+      const parts = authHeader.split(" ")
+      if (parts.length === 2 && parts[0].toLowerCase() === "bearer") {
+        providedKey = parts[1]
+      }
+    }
+
+    // 2. Check x-api-key header (Anthropic style)
+    if (!providedKey) {
+      providedKey = c.req.header("x-api-key")
+    }
+
+    // 3. Check x-goog-api-key header (Gemini style)
+    if (!providedKey) {
+      providedKey = c.req.header("x-goog-api-key")
+    }
+
+    // No API key found in any supported header
+    if (!providedKey) {
+      consola.warn("API request without valid API key header")
       return c.json(
         {
           error: {
-            message: "Missing Authorization header. Please provide your API key as 'Bearer <API_KEY>'",
+            message: "Missing API key. Please provide your API key via 'Authorization: Bearer <key>', 'x-api-key: <key>', or 'x-goog-api-key: <key>'",
             type: "authentication_error",
             code: "missing_api_key",
           },
@@ -51,22 +74,7 @@ export function apiKeyAuth() {
         401,
       )
     }
-    // Parse Bearer token
-    const parts = authHeader.split(" ")
-    if (parts.length !== 2 || parts[0].toLowerCase() !== "bearer") {
-      consola.warn("Invalid Authorization header format")
-      return c.json(
-        {
-          error: {
-            message: "Invalid Authorization header format. Expected 'Bearer <API_KEY>'",
-            type: "authentication_error",
-            code: "invalid_api_key_format",
-          },
-        },
-        401,
-      )
-    }
-    const providedKey = parts[1]
+
     // Validate API key using constant-time comparison to prevent timing attacks
     if (!safeCompare(providedKey, apiKey)) {
       consola.warn("Invalid API key provided")
@@ -81,6 +89,7 @@ export function apiKeyAuth() {
         401,
       )
     }
+
     // API key is valid, proceed
     return next()
   }
