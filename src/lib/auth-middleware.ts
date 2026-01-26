@@ -1,5 +1,25 @@
 import type { Context, Next } from "hono"
+import { timingSafeEqual } from "crypto"
 import consola from "consola"
+
+/**
+ * Constant-time string comparison to prevent timing attacks.
+ * Returns true if strings are equal, false otherwise.
+ */
+function safeCompare(a: string, b: string): boolean {
+  // Convert strings to buffers
+  const bufA = Buffer.from(a, "utf8")
+  const bufB = Buffer.from(b, "utf8")
+
+  // If lengths differ, we still need to do a comparison to maintain constant time
+  // We compare bufA with itself to keep timing consistent
+  if (bufA.length !== bufB.length) {
+    timingSafeEqual(bufA, bufA)
+    return false
+  }
+
+  return timingSafeEqual(bufA, bufB)
+}
 /**
  * API Key authentication middleware
  * 
@@ -47,8 +67,8 @@ export function apiKeyAuth() {
       )
     }
     const providedKey = parts[1]
-    // Validate API key
-    if (providedKey !== apiKey) {
+    // Validate API key using constant-time comparison to prevent timing attacks
+    if (!safeCompare(providedKey, apiKey)) {
       consola.warn("Invalid API key provided")
       return c.json(
         {
