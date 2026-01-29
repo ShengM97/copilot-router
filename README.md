@@ -203,8 +203,6 @@ Response includes:
 - `request_count` - Total requests made with this token
 - `error_count` - Number of errors
 - `last_used` - Last time the token was used
-- `has_copilot_token` - Whether the Copilot token is valid
-- `copilot_token_expires_at` - Expiration time of the Copilot token
 
 ## Grouped Display
 
