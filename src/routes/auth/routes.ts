@@ -129,8 +129,6 @@ export function registerAuthRoutes(app: OpenAPIHono) {
           username: s.username,
           account_type: s.accountType,
           is_active: s.isActive,
-          has_copilot_token: s.hasValidCopilotToken,
-          copilot_token_expires_at: s.copilotTokenExpiresAt?.toISOString() ?? null,
           request_count: s.requestCount,
           error_count: s.errorCount,
           last_used: s.lastUsed?.toISOString() ?? null,

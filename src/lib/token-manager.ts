@@ -41,8 +41,6 @@ export interface TokenEntry {
   id: number
   githubToken: string
   username: string | null
-  copilotToken: string | null
-  copilotTokenExpiresAt: Date | null
   accountType: string
   isActive: boolean
   models?: ModelsResponse
@@ -128,8 +126,6 @@ class TokenManager {
         id: record.Id,
         githubToken: record.Token,
         username: record.UserName,
-        copilotToken: null,
-        copilotTokenExpiresAt: null,
         accountType: record.AccountType,
         isActive: record.IsActive,
         requestCount: 0,
@@ -207,8 +203,6 @@ class TokenManager {
       id,
       githubToken,
       username,
-      copilotToken: null,
-      copilotTokenExpiresAt: null,
       accountType,
       isActive: true,
       requestCount: 0,
@@ -268,7 +262,7 @@ class TokenManager {
     const entries = Array.from(this.tokens.values())
     return {
       total: entries.length,
-      active: entries.filter(t => t.isActive && t.copilotToken).length,
+      active: entries.filter(t => t.isActive).length,
     }
   }
 
@@ -281,8 +275,6 @@ class TokenManager {
       username: entry.username,
       accountType: entry.accountType,
       isActive: entry.isActive,
-      hasValidCopilotToken: !!entry.copilotToken,
-      copilotTokenExpiresAt: entry.copilotTokenExpiresAt,
       requestCount: entry.requestCount,
       errorCount: entry.errorCount,
       lastUsed: entry.lastUsed,
@@ -295,8 +287,6 @@ export interface TokenStatistics {
   username: string | null
   accountType: string
   isActive: boolean
-  hasValidCopilotToken: boolean
-  copilotTokenExpiresAt: Date | null
   requestCount: number
   errorCount: number
   lastUsed?: Date
