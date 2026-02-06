@@ -52,6 +52,8 @@ function translateModelName(model: string): string {
     return "claude-sonnet-4.5"
   } else if (model.startsWith("claude-opus-4.5") || model.startsWith("claude-opus-4-5")) {
     return "claude-opus-4.5"
+  } else if (model.startsWith("claude-opus-4.6") || model.startsWith("claude-opus-4-6")) {
+    return "claude-opus-4.6"
   } else if (model.startsWith("claude-haiku-4.5") || model.startsWith("claude-haiku-4-5")) {
     return "claude-haiku-4.5"
   }
